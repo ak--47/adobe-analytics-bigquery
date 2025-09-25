@@ -1,0 +1,53 @@
+{
+  "project": "your-gcp-project-id",
+  "location": "US",
+  "dataset": "your_adobe_dataset",
+  "tables": {
+    "raw": "adobe_raw",
+    "bronze": "adobe_bronze",
+    "silver": "adobe_silver",
+    "gold": "adobe_gold"
+  },
+  "gcs": {
+    "sourceUri": "gs://your-bucket/adobe-data/*.tsv.gz",
+    "transformDest": "gs://your-bucket/adobe-data-cleaned/",
+    "rejectsDest": "gs://your-bucket/adobe-data-rejects/",
+    "exportPrefix": "gs://your-bucket/adobe-exports/part-*"
+  },
+  "paths": {
+    "tmpDir": "./tmp",
+    "lookupsDir": "./lookups"
+  },
+  "validation": {
+    "expectedColumns": 1189,
+    "expectedRows": 0,
+    "expectedErrors": 10000
+  },
+  "pipeline_config": {
+    "parallelism": 4,
+    "visitor_id_precedence": [
+      "post_visid",
+      "mcvisid",
+      "post_cust_visid",
+      "fallback"
+    ],
+    "page_view_detection": {
+      "use_post_page_event": true,
+      "use_evar_instances": true,
+      "use_url_change": true
+    },
+    "measurement_event_codes": [
+      200,
+      209,
+      236,
+      240
+    ],
+    "data_quality": {
+      "bad_rows_warn_pct": 0.05,
+      "bad_rows_fail_pct": 0.5,
+      "null_timestamp_warn_pct": 0.1,
+      "empty_visitor_id_warn_pct": 0.05,
+      "unknown_events_warn_pct": 0.1
+    }
+  }
+}

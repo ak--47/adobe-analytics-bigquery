@@ -1,0 +1,31 @@
+{
+  "name": "adobe-transform",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Adobe Analytics data transformation pipeline for BigQuery",
+  "main": "index.js",
+  "scripts": {
+    "validate": "node pipeline/1-validate.js",
+    "preprocess": "node pipeline/0a-preprocess.js",
+    "prep": "node pipeline/0-prepare.js",
+    "load": "node pipeline/2-load.js",
+    "bronze": "node pipeline/3-transform-bronze.js",
+    "silver": "node pipeline/3-transform-silver.js",
+    "gold": "node pipeline/3-transform-gold.js",
+	"transform": "node pipeline/3-transform.js",
+    "unload": "node pipeline/4-unload.js",
+    "reset": "node pipeline/5-reset.js",
+    "pipeline": "node index.js",
+	"prune": "rm -rf tmp/*"
+  },
+  "dependencies": {
+    "@google-cloud/bigquery": "^7.0.0",
+    "@google-cloud/storage": "^7.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10"
+  }
+}
