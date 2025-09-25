@@ -1,0 +1,544 @@
+🚀 Starting Adobe Analytics transformation pipeline...
+
+🛠️  Step 1: Prepare schema (REQUIRED FIRST)
+  === Schema Preparation Phase ===
+
+
+  Cleaning temporary directory...
+
+✅ Cleared 2 items from tmp directory (preserved .gitkeep)
+
+
+  Input header: ./lookups/columns.csv
+  Schema output: ./tmp/schema.json
+  Mapping output: ./tmp/sanitize-map.tsv
+
+  Processing column names...
+  Processing 1189 columns for Raw/Bronze/Silver layers
+  Note: Column optimization (removing non-post columns) will be applied only in Gold layer
+
+✅ Schema written: ./tmp/schema.json
+
+
+✅ Mapping written: ./tmp/sanitize-map.tsv
+
+  Header columns: 1189
+  Schema fields: 1189
+  Map rows: 1189
+
+✅ Schema preparation complete
+
+✅ Schema preparation complete
+
+📋 Step 3: Validation
+  === Validation Phase ===
+  Project: mixpanel-gtm-training
+  Dataset: korn_ferry_adobe_main
+  Location: US
+  Raw table: kfmain_raw
+  Bronze table: kfmain_bronze
+  Silver table: kfmain_silver
+  Gold table: kfmain_gold
+
+
+
+  Checking tmp directory...
+
+✅ Tmp directory exists: ./tmp
+
+  Checking lookups directory...
+
+✅ Lookups directory exists: ./lookups
+
+
+  Validating directory structure...
+
+✅ Directory found: sdr/
+
+
+✅ Directory found: values/
+
+
+  Validating complete file structure...
+
+✅ Found: columns.csv
+
+
+✅ Found: events.tsv
+
+
+✅ Found: sdr/custom-events.tsv
+
+
+✅ Found: sdr/evars.tsv
+
+
+✅ Found: sdr/custom-props.tsv
+
+
+✅ Found: values/browser_type.tsv
+
+
+✅ Found: values/browser.tsv
+
+
+✅ Found: values/color_depth.tsv
+
+
+✅ Found: values/connection_type.tsv
+
+
+✅ Found: values/country.tsv
+
+
+✅ Found: values/javascript_version.tsv
+
+
+✅ Found: values/languages.tsv
+
+
+✅ Found: values/operating_systems.tsv
+
+
+✅ Found: values/plugins.tsv
+
+
+✅ Found: values/referrer_type.tsv
+
+
+✅ Found: values/resolution.tsv
+
+
+✅ Found: values/search_engines.tsv
+
+
+✅ All 17 required files found and validated
+
+
+  Validating columns.csv...
+
+✅ columns.csv appears to be a single-row header
+
+  Header columns detected: 1189
+
+✅ Column count validation passed: 1189 columns
+
+  Checking BigQuery access...
+
+✅ Dataset exists: mixpanel-gtm-training:korn_ferry_adobe_main
+
+  Checking GCS access...
+  Checking for files in: gs://korn_ferry_adobe/s3_source/kf-main/ (wildcard pattern)
+  Found 5 file(s) in bucket with prefix: s3_source/kf-main/
+    • s3_source/kf-main/01-kornferryproduction_2023-06-01.tsv.gz
+    • s3_source/kf-main/01-kornferryproduction_2023-06-02.tsv.gz
+    • s3_source/kf-main/01-kornferryproduction_2023-06-03.tsv.gz
+    ... and 2 more files
+
+✅ GCS source data found: gs://korn_ferry_adobe/s3_source/kf-main/*.tsv.gz
+
+  Validating preprocessing completion...
+  Source files (gs://korn_ferry_adobe/s3_source/kf-main/*.tsv.gz): 767
+  Preprocessed files (gs://korn_ferry_adobe/s3_source/kf-main-cleaned/*.tsv.gz): 767
+
+✅ Preprocessing validation passed: 767 files preprocessed correctly
+
+
+✅ Export bucket accessible: gs://korn_ferry_adobe
+
+  Configuration validation summary:
+    • Project: mixpanel-gtm-training
+    • Dataset: korn_ferry_adobe_main (US)
+    • Tables: kfmain_raw → kfmain_bronze → kfmain_silver → kfmain_gold
+    • Data source: gs://korn_ferry_adobe/s3_source/kf-main/*.tsv.gz (raw)
+    • Preprocessed data: gs://korn_ferry_adobe/s3_source/kf-main-cleaned/ (will be used for loading)
+    • Export destination: gs://korn_ferry_adobe/mixpanel_dest/kf-main/part-*
+    • Lookups directory: ./lookups
+    • Temp directory: ./tmp
+    • Expected columns: 1189 (tolerance-based warning)
+    • Expected rows: 74484409 (tolerance-based warning)
+    • Error tolerance: 10000 (warning threshold)
+
+✅ Validation complete - Pipeline ready to run!
+
+✅ Validation complete
+
+📤 Step 4: Load raw data and lookups
+  === Loading Phase ===
+  Project: mixpanel-gtm-training
+  Dataset: korn_ferry_adobe_main
+  Raw table: kfmain_raw
+  GCS URI: gs://korn_ferry_adobe/s3_source/kf-main-cleaned/*.tsv.gz (preprocessed)
+
+
+✅ Dataset exists: mixpanel-gtm-training:korn_ferry_adobe_main
+
+  Raw table kfmain_raw already exists; skipping load.
+  Loading lookup table: lookup_events from ./lookups/events.tsv
+  Loading table lookup_events from local file: ./lookups/events.tsv
+  Load format: CSV, delimiter: '	', quote: ''
+  Loading table lookup_events with job: mixpanel-gtm-training:US.9a41b597-6f6f-4622-aace-6aa6acc1dd51
+  Waiting for job completion...
+    • Output rows: 1259
+
+✅ Table loaded: lookup_events
+
+  Loading SDR table: sdr_custom_events_raw from ./lookups/sdr/custom-events.tsv
+  Loading table sdr_custom_events_raw from local file: ./lookups/sdr/custom-events.tsv
+  Load format: CSV, delimiter: '	', quote: ''
+  Loading table sdr_custom_events_raw with job: mixpanel-gtm-training:US.dd77d8d5-4e40-488a-aea9-106dfd69adb8
+  Waiting for job completion...
+    • Output rows: 39
+
+✅ Table loaded: sdr_custom_events_raw
+
+  Loading SDR table: sdr_evars_raw from ./lookups/sdr/evars.tsv
+  Loading table sdr_evars_raw from local file: ./lookups/sdr/evars.tsv
+  Load format: CSV, delimiter: '	', quote: ''
+  Loading table sdr_evars_raw with job: mixpanel-gtm-training:US.531471a6-22ad-44da-8d0d-4434021ba087
+  Waiting for job completion...
+    • Output rows: 56
+
+✅ Table loaded: sdr_evars_raw
+
+  Loading SDR table: sdr_props_raw from ./lookups/sdr/custom-props.tsv
+  Loading table sdr_props_raw from local file: ./lookups/sdr/custom-props.tsv
+  Load format: CSV, delimiter: '	', quote: ''
+  Loading table sdr_props_raw with job: mixpanel-gtm-training:US.8daee4de-deb4-4c0d-9984-2c92bfb0027b
+  Waiting for job completion...
+    • Output rows: 52
+
+✅ Table loaded: sdr_props_raw
+
+  Loading lookup table: lookup_browser from ./lookups/values/browser.tsv
+  Loading table lookup_browser from local file: ./lookups/values/browser.tsv
+  Load format: CSV, delimiter: '	', quote: ''
+  Loading table lookup_browser with job: mixpanel-gtm-training:US.6bafba72-c12f-42c1-8b74-ef93507806ee
+  Waiting for job completion...
+    • Output rows: 5150493
+
+✅ Table loaded: lookup_browser
+
+  Loading lookup table: lookup_browser_type from ./lookups/values/browser_type.tsv
+  Loading table lookup_browser_type from local file: ./lookups/values/browser_type.tsv
+  Load format: CSV, delimiter: '	', quote: ''
+  Loading table lookup_browser_type with job: mixpanel-gtm-training:US.fd18239c-1067-4e0b-a1ac-6c989d5d83e0
+  Waiting for job completion...
+    • Output rows: 5150491
+
+✅ Table loaded: lookup_browser_type
+
+  Loading lookup table: lookup_connection_type from ./lookups/values/connection_type.tsv
+  Loading table lookup_connection_type from local file: ./lookups/values/connection_type.tsv
+  Load format: CSV, delimiter: '	', quote: ''
+  Loading table lookup_connection_type with job: mixpanel-gtm-training:US.3e16f478-4856-41b9-9e25-616c8c0d6475
+  Waiting for job completion...
+    • Output rows: 5
+
+✅ Table loaded: lookup_connection_type
+
+  Loading lookup table: lookup_languages from ./lookups/values/languages.tsv
+  Loading table lookup_languages from local file: ./lookups/values/languages.tsv
+  Load format: CSV, delimiter: '	', quote: ''
+  Loading table lookup_languages with job: mixpanel-gtm-training:US.3db77a4b-fe98-40f3-b476-1e0677d325f2
+  Waiting for job completion...
+    • Output rows: 525
+
+✅ Table loaded: lookup_languages
+
+  Loading lookup table: lookup_referrer_type from ./lookups/values/referrer_type.tsv
+  Loading table lookup_referrer_type from local file: ./lookups/values/referrer_type.tsv
+  Load format: CSV, delimiter: '	', quote: ''
+  Loading table lookup_referrer_type with job: mixpanel-gtm-training:US.6af519ce-7898-4aa7-a90e-05fd74909625
+  Waiting for job completion...
+    • Output rows: 9
+
+✅ Table loaded: lookup_referrer_type
+
+  Loading lookup table: lookup_country from ./lookups/values/country.tsv
+  Loading table lookup_country from local file: ./lookups/values/country.tsv
+  Load format: CSV, delimiter: '	', quote: ''
+  Loading table lookup_country with job: mixpanel-gtm-training:US.4013d643-60fe-43ef-908a-e9f4e3097cd3
+  Waiting for job completion...
+    • Output rows: 261
+
+✅ Table loaded: lookup_country
+
+  Loading lookup table: lookup_operating_systems from ./lookups/values/operating_systems.tsv
+  Loading table lookup_operating_systems from local file: ./lookups/values/operating_systems.tsv
+  Load format: CSV, delimiter: '	', quote: ''
+  Loading table lookup_operating_systems with job: mixpanel-gtm-training:US.b7992f7a-7333-45c1-bdb1-9e9c1a1cc2f7
+  Waiting for job completion...
+    • Output rows: 137604
+
+✅ Table loaded: lookup_operating_systems
+
+  Loading lookup table: lookup_resolution from ./lookups/values/resolution.tsv
+  Loading table lookup_resolution from local file: ./lookups/values/resolution.tsv
+  Load format: CSV, delimiter: '	', quote: ''
+  Loading table lookup_resolution with job: mixpanel-gtm-training:US.ebe47d8e-91b8-4a1d-b011-f56c2adebbf2
+  Waiting for job completion...
+    • Output rows: 840
+
+✅ Table loaded: lookup_resolution
+
+  Loading lookup table: lookup_color_depth from ./lookups/values/color_depth.tsv
+  Loading table lookup_color_depth from local file: ./lookups/values/color_depth.tsv
+  Load format: CSV, delimiter: '	', quote: ''
+  Loading table lookup_color_depth with job: mixpanel-gtm-training:US.64d81ddf-2d48-449d-95dd-05a6f3ef4abd
+  Waiting for job completion...
+    • Output rows: 23
+
+✅ Table loaded: lookup_color_depth
+
+  Loading lookup table: lookup_javascript_version from ./lookups/values/javascript_version.tsv
+  Loading table lookup_javascript_version from local file: ./lookups/values/javascript_version.tsv
+  Load format: CSV, delimiter: '	', quote: ''
+  Loading table lookup_javascript_version with job: mixpanel-gtm-training:US.c42329e2-2a48-40e0-bd54-66f39202473a
+  Waiting for job completion...
+    • Output rows: 15
+
+✅ Table loaded: lookup_javascript_version
+
+  Loading lookup table: lookup_plugins from ./lookups/values/plugins.tsv
+  Loading table lookup_plugins from local file: ./lookups/values/plugins.tsv
+  Load format: CSV, delimiter: '	', quote: ''
+  Loading table lookup_plugins with job: mixpanel-gtm-training:US.ec195eea-8a1f-49e6-ba00-17ae5d18b2d3
+  Waiting for job completion...
+    • Output rows: 3910
+
+✅ Table loaded: lookup_plugins
+
+  Loading lookup table: lookup_search_engines from ./lookups/values/search_engines.tsv
+  Loading table lookup_search_engines from local file: ./lookups/values/search_engines.tsv
+  Load format: CSV, delimiter: '	', quote: ''
+  Loading table lookup_search_engines with job: mixpanel-gtm-training:US.13e6d308-a1ab-4f2b-b83c-4f502db87eab
+  Waiting for job completion...
+    • Output rows: 750
+
+✅ Table loaded: lookup_search_engines
+
+  Creating SDR mapping tables...
+  Running BigQuery job: 5828848f-aaf9-4711-ad3e-c3e11a5b89b8
+
+✅ Query completed: 5828848f-aaf9-4711-ad3e-c3e11a5b89b8
+
+
+✅ SDR mapping tables created
+
+  === Load Summary ===
+  
+📊 Raw Data Tables:
+
+✅   ✅ kfmain_raw: 74,484,409 rows - Adobe Analytics source data
+
+  
+📊 SDR Raw Tables:
+
+✅   ✅ sdr_custom_events_raw: 39 rows - Custom events mapping (raw)
+
+
+✅   ✅ sdr_evars_raw: 56 rows - eVars mapping (raw)
+
+
+✅   ✅ sdr_props_raw: 52 rows - Props mapping (raw)
+
+  
+📊 SDR Processed Tables:
+
+✅   ✅ sdr_custom_events: 39 rows - Custom events mapping (processed)
+
+
+✅   ✅ sdr_evars: 56 rows - eVars mapping (processed)
+
+
+✅   ✅ event_map: 1,259 rows - Unified event mapping
+
+  
+📊 Events Tables:
+
+✅   ✅ lookup_events: 1,259 rows - Base event codes and names
+
+  
+📊 Lookup Tables:
+
+✅   ✅ lookup_browser: 5,150,493 rows - Browser lookup
+
+
+✅   ✅ lookup_browser_type: 5,150,491 rows - Browser type lookup
+
+
+✅   ✅ lookup_connection_type: 5 rows - Connection type lookup
+
+
+✅   ✅ lookup_languages: 525 rows - Languages lookup
+
+
+✅   ✅ lookup_referrer_type: 9 rows - Referrer type lookup
+
+
+✅   ✅ lookup_country: 261 rows - Country lookup
+
+
+✅   ✅ lookup_operating_systems: 137,604 rows - Operating systems lookup
+
+
+✅   ✅ lookup_resolution: 840 rows - Resolution lookup
+
+
+✅   ✅ lookup_color_depth: 23 rows - Color depth lookup
+
+
+✅   ✅ lookup_javascript_version: 15 rows - JavaScript version lookup
+
+
+✅   ✅ lookup_plugins: 3,910 rows - Plugins lookup
+
+
+✅   ✅ lookup_search_engines: 750 rows - Search engines lookup
+
+
+  📈 Summary Statistics:
+
+✅   • Total main data rows: 74,484,409
+
+
+✅   • Tables loaded: 20
+
+
+✅   • Lookup tables: 12
+
+
+✅   • SDR mapping tables: 6
+
+    • Data source: gs://korn_ferry_adobe/s3_source/kf-main-cleaned/*.tsv.gz (preprocessed)
+
+
+✅ Loading phase complete
+
+✅ Loading complete
+
+🥉 Step 5: Transform raw to bronze
+  === Bronze Transformation Phase ===
+
+
+  Transforming kfmain_raw → kfmain_bronze
+
+
+✅ Dataset exists: mixpanel-gtm-training:korn_ferry_adobe_main
+
+  Creating Bronze table: kfmain_bronze
+  Generating dynamic column cleaning SQL...
+  Running BigQuery job: 6a3c155c-2a7c-490d-8e12-41ba09ebe9ec
+
+✅ Query completed: 6a3c155c-2a7c-490d-8e12-41ba09ebe9ec
+
+
+✅ Bronze table created with 74484400 rows
+
+  Bronze table quality metrics:
+    • Total rows: 74484400
+    • Unique visitors: 9248365
+    • Valid timestamps: 74484396
+    • Rows with events: 74484400
+    • Total events: 564919190
+  Running Bronze data quality checks...
+
+✅ ✅ Timestamp quality: 100.0% valid timestamps
+
+
+✅ ✅ Visitor ID quality: 100.0% valid visitor IDs
+
+
+⚠️  ⚠️  Found 716 duplicate hit IDs
+
+
+✅ ✅ Row count validation passed: 74484400 rows
+
+
+✅ Bronze transformation complete
+
+✅ Bronze transformation complete
+
+🥈 Step 6: Transform bronze to silver (SDR mappings)
+  === Silver Transformation Phase ===
+
+
+  Transforming kfmain_bronze → kfmain_silver (SDR mappings)
+
+
+✅ Dataset exists: mixpanel-gtm-training:korn_ferry_adobe_main
+
+  Creating event mapping table with SDR overrides...
+  Running BigQuery job: 79d1110e-f122-4622-ad44-aa6bcedc199e
+
+✅ Query completed: 79d1110e-f122-4622-ad44-aa6bcedc199e
+
+
+✅ Event mapping table created
+
+  Creating Silver table: kfmain_silver
+  Generating dynamic SDR-based column aliases...
+  Running BigQuery job: 33ce277c-0045-4141-999f-9e9542686c7b
+
+✅ Query completed: 33ce277c-0045-4141-999f-9e9542686c7b
+
+
+✅ Silver table created with 74484396 rows
+
+  Silver table quality metrics:
+    • Total rows: 74484396
+    • Unique visitors: 9248364
+    • Page views: 26480258
+    • Link tracking hits: 48004138
+    • Total events: 564919190
+    • Date range: 762 unique days
+  Running Silver data quality checks...
+
+✅ ✅ Event mapping quality: 100.0% events have names
+
+
+✅ ✅ Page view distribution: 35.6% page views, 64.4% interactions
+
+
+✅ Silver transformation complete
+
+✅ Silver transformation complete
+
+🥇 Step 7: Transform silver to gold (eventification)
+  === Gold Transformation Phase ===
+
+
+  Transforming kfmain_silver → kfmain_gold (Eventification)
+
+
+✅ Dataset exists: mixpanel-gtm-training:korn_ferry_adobe_main
+
+  Creating Gold table: kfmain_gold
+  Running BigQuery job: d6f08f19-2138-4147-bc96-5c4008f684f2
+
+✅ Query completed: d6f08f19-2138-4147-bc96-5c4008f684f2
+
+
+✅ Gold table created with 91596934 events
+
+  Gold table eventification metrics:
+    • Total events: 91596934
+    • Unique visitors: 9155005
+    • Page view events: 26480258
+    • Link tracking events: 58207639
+    • Unique event types: 34
+    • Date range: 762 days
+    • Avg pages per visit: 32.24
+    • Avg events per hit: 1.05
+  Top 10 event types:
+    1. Page Viewed: 26480258 events
+    2. Search unsuccessful: 9952934 events
+    3. YouTube Video: 9952529 events
+    4. Asset Download (Gated): 7885180 events
+    5. Page Name: 7018735 events
+    6. Page Scroll 25: 6034459 events
+    7. Campaign View: 5914801 events
+    8. Page Scroll 50: 2832396 events
+    9. Vimeo Video: 2687531 events
+    10. Video Start: 2024561 events

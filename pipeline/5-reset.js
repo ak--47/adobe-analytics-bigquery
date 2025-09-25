@@ -58,10 +58,10 @@ export async function reset(config) {
   }
 
   Logger.warn(`⚠️  This will DELETE ${tableNames.length} tables/views from dataset: ${config.dataset}`);
-  Logger.info('Proceeding with deletion in 2 seconds...');
+  Logger.info('Proceeding with deletion in 5 seconds...');
 
   // Small delay to let user see the warning
-  await new Promise(resolve => setTimeout(resolve, 2000));
+  await new Promise(resolve => setTimeout(resolve, 5000));
 
   // Delete all tables and views
   let deletedCount = 0;

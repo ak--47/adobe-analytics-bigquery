@@ -19,6 +19,29 @@ export async function transformToGold(config) {
     return;
   }
 
+  // Ensure SDR mapping tables exist and are up-to-date
+  Logger.info('Verifying SDR mapping tables...');
+  const requiredTables = ['sdr_custom_events', 'sdr_evars', 'event_map'];
+  const missingTables = [];
+
+  for (const tableName of requiredTables) {
+    if (!(await bq.tableExists(tableName))) {
+      missingTables.push(tableName);
+    }
+  }
+
+  if (missingTables.length > 0) {
+    Logger.info(`Missing SDR tables: ${missingTables.join(', ')}. Creating them now...`);
+    const sdrSql = await loadSqlTemplate('./models/create-sdr-maps.sql', {
+      project: config.project,
+      dataset: config.dataset
+    });
+    await bq.executeQuery(sdrSql);
+    Logger.success('SDR mapping tables created');
+  } else {
+    Logger.success('SDR mapping tables verified');
+  }
+
   Logger.info(`Creating Gold table: ${config.tables.gold}`);
 
   // Load SQL template and execute
@@ -27,7 +50,8 @@ export async function transformToGold(config) {
     dataset: config.dataset,
     silverTable: config.tables.silver,
     goldTable: config.tables.gold,
-    measurementEventCodes: JSON.stringify(config.pipeline_config.measurement_event_codes)
+    measurementEventCodes: JSON.stringify(config.pipeline_config.measurement_event_codes),
+    ignoreHits: JSON.stringify(config.pipeline_config.ignore_hits)
   });
 
   await bq.executeQuery(goldSql);
@@ -38,9 +62,9 @@ export async function transformToGold(config) {
       COUNT(*) as total_events,
       COUNT(DISTINCT distinct_id) as unique_visitors,
       COUNT(DISTINCT insert_id) as unique_events,
-      SUM(CASE WHEN event = 'Page Viewed' THEN 1 ELSE 0 END) as page_view_events,
+      SUM(CASE WHEN event_name = 'Page Viewed' THEN 1 ELSE 0 END) as page_view_events,
       SUM(CASE WHEN is_link_tracking THEN 1 ELSE 0 END) as link_tracking_events,
-      COUNT(DISTINCT event) as unique_event_types,
+      COUNT(DISTINCT event_name) as unique_event_types,
       COUNT(DISTINCT DATE(ts_utc)) as date_range_days,
       ROUND(AVG(SAFE_CAST(visit_page_num AS FLOAT64)), 2) as avg_pages_per_visit,
       ROUND(AVG(SAFE_CAST(event_sequence AS FLOAT64)), 2) as avg_events_per_hit
@@ -68,9 +92,9 @@ export async function transformToGold(config) {
 
   // Sample the most common events
   const topEventsSql = `
-    SELECT event, COUNT(*) as event_count
+    SELECT event_name, COUNT(*) as event_count
     FROM \`${config.project}.${config.dataset}.${config.tables.gold}\`
-    GROUP BY event
+    GROUP BY event_name
     ORDER BY event_count DESC
     LIMIT 10
   `;
@@ -78,7 +102,7 @@ export async function transformToGold(config) {
   const [topEventsRows] = await bq.bq.query(topEventsSql);
   Logger.info('Top 10 event types:');
   topEventsRows.forEach((row, i) => {
-    Logger.info(`  ${i + 1}. ${row.event}: ${row.event_count} events`);
+    Logger.info(`  ${i + 1}. ${row.event_name}: ${row.event_count} events`);
   });
 
   // Gold-specific data quality checks

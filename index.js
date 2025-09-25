@@ -25,13 +25,13 @@ async function main() {
     await prepare(config);
     console.log('✅ Schema preparation complete\n');
 
-    console.log('🔧 Step 2: Preprocess TSV files (OPTIONAL)');
-    if (config.gcs.transformDest) {
-      await preprocess(config);
-      console.log('✅ Preprocessing complete\n');
-    } else {
-      console.log('⏭️  Skipping preprocessing (transformDest not configured)\n');
-    }
+    // console.log('🔧 Step 2: Preprocess TSV files (OPTIONAL)');
+    // if (config.gcs.transformDest) {
+    //   await preprocess(config);
+    //   console.log('✅ Preprocessing complete\n');
+    // } else {
+    //   console.log('⏭️  Skipping preprocessing (transformDest not configured)\n');
+    // }
 
     console.log('📋 Step 3: Validation');
     await validate(config);
@@ -53,9 +53,9 @@ async function main() {
     await transformToGold(config);
     console.log('✅ Gold transformation complete\n');
 
-    console.log('📦 Step 8: Export gold data');
-    await unload(config);
-    console.log('✅ Export complete\n');
+    // console.log('📦 Step 8: Export gold data');
+    // await unload(config);
+    // console.log('✅ Export complete\n');
 
     console.log('🎉 Pipeline completed successfully!');
 

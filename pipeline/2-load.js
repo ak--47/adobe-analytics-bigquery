@@ -80,6 +80,49 @@ async function validateRawDataQuality(config, bq, tableName) {
     }
   }
 
+  // Run raw data quality validation (timestamps and hit IDs)
+  Logger.info('Validating timestamp and hit ID integrity...');
+
+  const qualitySql = await loadSqlTemplate('./models/validate-raw-quality.sql', {
+    project: config.project,
+    dataset: config.dataset,
+    rawTable: tableName
+  });
+
+  const [qualityRows] = await bq.bq.query(qualitySql);
+  const quality = qualityRows[0];
+
+  // Log detailed quality metrics
+  Logger.info('Raw data quality analysis:');
+  Logger.info(`  • Total records: ${quality.total_records.toLocaleString()}`);
+  Logger.info(`  • Clean records: ${quality.clean_records.toLocaleString()} (${quality.clean_record_pct}%)`);
+  Logger.info(`  • Malformed records: ${quality.malformed_record_count.toLocaleString()} (${quality.malformed_record_pct}%)`);
+
+  if (quality.malformed_record_count > 0) {
+    Logger.info('Quality breakdown:');
+    Logger.info(`    - Bad hit_time_gmt: ${quality.malformed_hit_time_gmt.toLocaleString()} (${quality.malformed_hit_time_gmt_pct}%)`);
+    Logger.info(`    - Bad hitid_high: ${quality.malformed_hitid_high.toLocaleString()} (${quality.malformed_hitid_high_pct}%)`);
+    Logger.info(`    - Bad hitid_low: ${quality.malformed_hitid_low.toLocaleString()} (${quality.malformed_hitid_low_pct}%)`);
+  }
+
+  // Issue warnings based on quality thresholds
+  const malformedPct = parseFloat(quality.malformed_record_pct);
+  if (malformedPct > 5) {
+    Logger.warn(`⚠️  High malformed record rate: ${malformedPct}%. This indicates significant data quality issues.`);
+  } else if (malformedPct > 1) {
+    Logger.warn(`⚠️  Moderate malformed record rate: ${malformedPct}%. Some records will be dropped in Bronze transformation.`);
+  } else if (malformedPct > 0) {
+    Logger.info(`ℹ️  Low malformed record rate: ${malformedPct}%. Expected data quality variance.`);
+  } else {
+    Logger.success(`✅ Perfect data quality: 0% malformed records`);
+  }
+
+  // Important note about Bronze transformation
+  if (quality.malformed_record_count > 0) {
+    Logger.info(`📝 Note: ${quality.malformed_record_count.toLocaleString()} malformed records will be filtered out during Bronze transformation.`);
+    Logger.info(`   Expected Bronze record count: ~${quality.clean_records.toLocaleString()} (${quality.clean_record_pct}% of raw)`);
+  }
+
   Logger.success('Data quality validation complete');
 }
 

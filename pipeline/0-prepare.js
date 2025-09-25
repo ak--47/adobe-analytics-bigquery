@@ -143,7 +143,63 @@ export async function prepare(config) {
     });
   }
 
+  // Generate Mixpanel permissions script if mixpanel_project_id is configured
+  if (config.mixpanel_project_id) {
+    await generateMixpanelPermissionsScript(config);
+  }
+
   Logger.success('Schema preparation complete');
+}
+
+async function generateMixpanelPermissionsScript(config) {
+  Logger.info('Generating Mixpanel permissions script...');
+
+  const serviceAccount = `project-${config.mixpanel_project_id}@mixpanel-warehouse-1.iam.gserviceaccount.com`;
+
+  const scriptContent = `#!/usr/bin/env bash
+set -euo pipefail
+
+# ====== CONFIG ======
+PROJECT_ID="${config.project}"
+DATASET_ID="${config.dataset}"   # dataset to allow viewing
+SERVICE_ACCOUNT="${serviceAccount}" # mixpanel_project_id: ${config.mixpanel_project_id}
+LOCATION="${config.location}"                        # set to the dataset's location (e.g., US, EU, us-central1)
+# ====================
+
+echo ">>> Ensure project-level Job User (needed to run query jobs; not a data access role)"
+gcloud projects add-iam-policy-binding "$PROJECT_ID" \\
+  --member="serviceAccount:$SERVICE_ACCOUNT" \\
+  --role="roles/bigquery.jobUser" || echo "Job User role may already be assigned"
+
+echo ">>> Grant dataset-scoped Data Viewer via BigQuery DCL (IAM on the dataset only)"
+bq --location="$LOCATION" query --nouse_legacy_sql --quiet \\
+"GRANT \\\`roles/bigquery.dataViewer\\\`
+ON SCHEMA \\\`$PROJECT_ID.$DATASET_ID\\\`
+TO \\\"serviceAccount:$SERVICE_ACCOUNT\\\";"
+
+# ---- OPTIONAL: sanity checks ----
+
+echo ">>> Optional: show current dataset-level privileges for this principal"
+bq --location="$LOCATION" query --nouse_legacy_sql --quiet \\
+"SELECT grantee, role
+FROM \\\`region-$LOCATION\\\`.INFORMATION_SCHEMA.SCHEMA_PRIVILEGES
+WHERE schema_name = '$DATASET_ID'
+  AND table_catalog = '$PROJECT_ID'
+  AND grantee = 'serviceAccount:$SERVICE_ACCOUNT';" || true
+
+echo ">>> Optional: try a dry-run query against the dataset to confirm permissions (no cost)"
+# Uncomment to test with an actual table:
+# bq --location="$LOCATION" query --nouse_legacy_sql --dry_run --quiet "SELECT COUNT(*) FROM \\\`$PROJECT_ID.$DATASET_ID.${config.tables.gold}\\\`"
+
+echo "All done ✅"
+`;
+
+  const scriptPath = `${config.paths.tmpDir}/grant-mixpanel-access.sh`;
+  await writeFile(scriptPath, scriptContent);
+
+  Logger.success(`Mixpanel permissions script written: ${scriptPath}`);
+  Logger.info(`Service Account: ${serviceAccount}`);
+  Logger.info(`Grant access with: chmod +x ${scriptPath} && ${scriptPath}`);
 }
 
 // Allow running as standalone script

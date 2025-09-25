@@ -161,14 +161,28 @@ export async function validate(config) {
 
   // Check transformDest if configured (preprocessed files)
   if (config.gcs.transformDest) {
-    Logger.info('Checking preprocessed files (transformDest)...');
-    const transformExists = await storage.checkUriExists(config.gcs.transformDest + config.gcs.sourceUri.split('/').pop());
-    if (transformExists) {
-      Logger.success(`Preprocessed data found: ${config.gcs.transformDest}`);
-    } else {
-      Logger.warn(`⚠️  transformDest is configured but no preprocessed files found at: ${config.gcs.transformDest}`);
-      Logger.info('Run preprocessing step first: npm run preprocess');
+    Logger.info('Validating preprocessing completion...');
+
+    // Get file counts from source and transform destinations
+    const sourceFileCount = await storage.getFileCount(config.gcs.sourceUri);
+    const transformFileCount = await storage.getFileCount(config.gcs.transformDest + '*.tsv.gz');
+
+    Logger.info(`Source files (${config.gcs.sourceUri}): ${sourceFileCount}`);
+    Logger.info(`Preprocessed files (${config.gcs.transformDest}*.tsv.gz): ${transformFileCount}`);
+
+    if (sourceFileCount === 0) {
+      throw new Error(`No source files found at: ${config.gcs.sourceUri}`);
     }
+
+    if (transformFileCount === 0) {
+      throw new Error(`transformDest is configured but no preprocessed files found. Run preprocessing first: npm run preprocess`);
+    }
+
+    if (sourceFileCount !== transformFileCount) {
+      throw new Error(`File count mismatch: ${sourceFileCount} source files but ${transformFileCount} preprocessed files. Preprocessing may be incomplete - run: npm run preprocess`);
+    }
+
+    Logger.success(`Preprocessing validation passed: ${sourceFileCount} files preprocessed correctly`);
   }
 
   // Check export bucket access

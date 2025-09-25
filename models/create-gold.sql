@@ -3,7 +3,7 @@
 -- Applies Adobe-specific column optimization (removes non-post columns to save ~50% space)
 CREATE OR REPLACE TABLE `${project}.${dataset}.${goldTable}`
 PARTITION BY DATE(ts_utc)
-CLUSTER BY distinct_id, event, is_page_view
+CLUSTER BY distinct_id, event_name, is_page_view
 AS
 WITH
 -- Separate measurements from real events
@@ -12,7 +12,7 @@ events_classified AS (
     *,
     -- Extract measurement properties (events with values > 1 or special measurement events)
     STRUCT(
-      -- Extract measurement values from events
+      -- Static measurement extractions (legacy pattern matching)
       (SELECT event.event_value FROM UNNEST(events_enhanced) AS event WHERE event.event_name LIKE '%Page Load Time%' LIMIT 1) AS page_load_time,
       (SELECT event.event_value FROM UNNEST(events_enhanced) AS event WHERE event.event_name LIKE '%Time on Page%' LIMIT 1) AS time_on_page,
       (SELECT event.event_value FROM UNNEST(events_enhanced) AS event WHERE event.event_name LIKE '%Scroll%' LIMIT 1) AS scroll_depth,
@@ -21,7 +21,12 @@ events_classified AS (
       (SELECT event.event_value FROM UNNEST(events_enhanced) AS event WHERE event.event_name LIKE '%Video%' LIMIT 1) AS video_plays,
       (SELECT event.event_value FROM UNNEST(events_enhanced) AS event WHERE event.event_name LIKE '%Download%' LIMIT 1) AS downloads,
       (SELECT event.event_value FROM UNNEST(events_enhanced) AS event WHERE event.event_name LIKE '%External%' LIMIT 1) AS external_links,
-      (SELECT event.event_value FROM UNNEST(events_enhanced) AS event WHERE event.event_name LIKE '%Link Click%' LIMIT 1) AS custom_link_clicks
+      (SELECT event.event_value FROM UNNEST(events_enhanced) AS event WHERE event.event_name LIKE '%Link Click%' LIMIT 1) AS custom_link_clicks,
+
+      -- Dynamic measurement extractions (from measurement_event_codes)
+      (SELECT event.event_value FROM UNNEST(events_enhanced) AS event WHERE SAFE_CAST(event.event_code AS INT64) = 209 LIMIT 1) AS measurement_209_page_load_time,
+      (SELECT event.event_value FROM UNNEST(events_enhanced) AS event WHERE SAFE_CAST(event.event_code AS INT64) = 236 LIMIT 1) AS measurement_236_page_scroll_75,
+      (SELECT event.event_value FROM UNNEST(events_enhanced) AS event WHERE SAFE_CAST(event.event_code AS INT64) = 240 LIMIT 1) AS measurement_240
     ) AS measurements,
 
     -- Extract only true business events (exclude eVar instances which should be properties)
@@ -40,6 +45,8 @@ events_classified AS (
         AND NOT (SAFE_CAST(event.event_code AS INT64) >= 10000)
         -- Exclude measurement events - these should be properties, not exploded events
         AND SAFE_CAST(event.event_code AS INT64) NOT IN UNNEST(${measurementEventCodes})
+        -- Exclude ignored hits - these should be completely discarded
+        AND SAFE_CAST(event.event_code AS INT64) NOT IN UNNEST(${ignoreHits})
     ) AS business_events
 
   FROM `${project}.${dataset}.${silverTable}`
@@ -56,6 +63,9 @@ hit_base AS (
       CAST(ROW_NUMBER() OVER (PARTITION BY distinct_id, ts_utc ORDER BY ts_utc) AS STRING)
     ) AS hit_id,
 
+    -- Generate sequential hit number for traceability
+    ROW_NUMBER() OVER (ORDER BY ts_utc, distinct_id) AS original_hit_no,
+
     -- Determine primary event name for this hit
     CASE
       WHEN is_page_view THEN 'Page Viewed'
@@ -70,10 +80,12 @@ hit_base AS (
 events_exploded AS (
   -- Page View events (one per page view)
   SELECT
-    hit_id || '-0' AS insert_id,
+    TO_HEX(MD5(CONCAT(distinct_id, '-', 'Page Viewed', '-', CAST(UNIX_MICROS(ts_utc) AS STRING)))) AS insert_id,
     ts_utc,
     distinct_id,
-    'Page Viewed' AS event,
+    'Page Viewed' AS event_name,
+    NULL AS original_event_code,
+    NULL AS original_event_name,
     TRUE AS is_page_view,
     FALSE AS is_link_tracking,
 
@@ -92,6 +104,11 @@ events_exploded AS (
     measurements.downloads,
     measurements.external_links,
     measurements.custom_link_clicks,
+
+    -- Add dynamic measurement columns
+    measurements.measurement_209_page_load_time,
+    measurements.measurement_236_page_scroll_75,
+    measurements.measurement_240,
 
     CAST(NULL AS FLOAT64) AS event_value,
 
@@ -162,7 +179,8 @@ events_exploded AS (
 
     -- Metadata
     ts_utc AS original_timestamp,
-    'page_view' AS hit_type
+    'page_view' AS hit_type,
+    original_hit_no
 
   FROM hit_base
   LEFT JOIN `${project}.${dataset}.lookup_browser` browser_lookup ON SAFE_CAST(browser AS INT64) = browser_lookup.id
@@ -176,10 +194,12 @@ events_exploded AS (
 
   -- Business events (one per event in business_events array)
   SELECT
-    hit_id || '-' || CAST(event_index + 1 AS STRING) AS insert_id,
+    TO_HEX(MD5(CONCAT(distinct_id, '-', COALESCE(event_map.name, event.event_name), '-', CAST(UNIX_MICROS(TIMESTAMP_ADD(ts_utc, INTERVAL (event_index + 1) * 5 SECOND)) AS STRING)))) AS insert_id,
     TIMESTAMP_ADD(ts_utc, INTERVAL (event_index + 1) * 5 SECOND) AS ts_utc,  -- Nudge timestamps
     distinct_id,
-    COALESCE(event_map.name, event.event_name) AS event,
+    COALESCE(event_map.name, event.event_name) AS event_name,
+    event.event_code AS original_event_code,
+    event.event_name AS original_event_name,
     FALSE AS is_page_view,
     NOT is_page_view AS is_link_tracking,
 
@@ -198,6 +218,11 @@ events_exploded AS (
     measurements.downloads,
     measurements.external_links,
     measurements.custom_link_clicks,
+
+    -- Dynamic measurement columns
+    measurements.measurement_209_page_load_time,
+    measurements.measurement_236_page_scroll_75,
+    measurements.measurement_240,
 
     -- Event-specific value
     event.event_value,
@@ -271,7 +296,8 @@ events_exploded AS (
     CASE
       WHEN is_page_view THEN 'event_on_page'
       ELSE 'link_tracking'
-    END AS hit_type
+    END AS hit_type,
+    original_hit_no
 
   FROM hit_base,
   UNNEST(business_events) AS event WITH OFFSET AS event_index
@@ -286,10 +312,12 @@ events_exploded AS (
 
   -- Fallback events for hits with no page view and no business events but have measurements
   SELECT
-    hit_id || '-fallback' AS insert_id,
+    TO_HEX(MD5(CONCAT(distinct_id, '-', 'Action Tracked', '-', CAST(UNIX_MICROS(ts_utc) AS STRING)))) AS insert_id,
     ts_utc,
     distinct_id,
-    'Action Tracked' AS event,
+    'Action Tracked' AS event_name,
+    NULL AS original_event_code,
+    NULL AS original_event_name,
     FALSE AS is_page_view,
     TRUE AS is_link_tracking,
 
@@ -308,6 +336,11 @@ events_exploded AS (
     measurements.downloads,
     measurements.external_links,
     measurements.custom_link_clicks,
+
+    -- Dynamic measurement columns
+    measurements.measurement_209_page_load_time,
+    measurements.measurement_236_page_scroll_75,
+    measurements.measurement_240,
 
     CAST(NULL AS FLOAT64) AS event_value,
 
@@ -377,7 +410,8 @@ events_exploded AS (
 
     -- Metadata
     ts_utc AS original_timestamp,
-    'measurement_only' AS hit_type
+    'measurement_only' AS hit_type,
+    original_hit_no
 
   FROM hit_base
   LEFT JOIN `${project}.${dataset}.lookup_browser` browser_lookup ON SAFE_CAST(browser AS INT64) = browser_lookup.id

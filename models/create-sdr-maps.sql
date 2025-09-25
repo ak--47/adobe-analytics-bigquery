@@ -9,7 +9,9 @@ SELECT
   Name AS name_override,
   SAFE_CAST(199 + SAFE_CAST(REGEXP_EXTRACT(Event, r'(?i)event(\d+)') AS INT64) AS INT64) AS code
 FROM `${project}.${dataset}.sdr_custom_events_raw`
-WHERE REGEXP_CONTAINS(Event, r'(?i)^event\d+$') AND Name IS NOT NULL;
+WHERE REGEXP_CONTAINS(Event, r'(?i)^event\d+$')
+  AND Name IS NOT NULL
+  AND TRIM(Name) != '';
 
 -- Normalize SDR evars -> evar_number; produce standard (100+) and extended (10000+) codes
 CREATE OR REPLACE TABLE `${project}.${dataset}.sdr_evars` AS

@@ -241,6 +241,53 @@ export class StorageHelper {
       return false;
     }
   }
+
+  async getFileCount(uri) {
+    try {
+      // Parse gs://bucket/path format
+      const match = uri.match(/^gs:\/\/([^\/]+)\/(.+)$/);
+      if (!match) {
+        throw new Error(`Invalid GCS URI format: ${uri}`);
+      }
+
+      let [, bucketName, path] = match;
+      const bucket = this.storage.bucket(bucketName);
+
+      // Handle wildcards by converting to prefix
+      if (path.includes('*')) {
+        const prefix = path.substring(0, path.lastIndexOf('/') + 1);
+        const pattern = path.substring(path.lastIndexOf('/') + 1);
+
+        // Get all files with the prefix
+        const [files] = await bucket.getFiles({ prefix });
+
+        // Filter files that match the wildcard pattern
+        const matchingFiles = files.filter(file => {
+          const fileName = file.name.substring(prefix.length);
+          return this.matchesWildcard(fileName, pattern);
+        });
+
+        return matchingFiles.length;
+      } else {
+        // No wildcard, check if single file exists
+        const [files] = await bucket.getFiles({ prefix: path, maxResults: 1 });
+        return files.length;
+      }
+    } catch (error) {
+      Logger.error(`GCS file count failed for ${uri}: ${error.message}`);
+      return 0;
+    }
+  }
+
+  matchesWildcard(fileName, pattern) {
+    // Convert wildcard pattern to regex
+    const regexPattern = pattern
+      .replace(/\./g, '\\.')  // Escape dots
+      .replace(/\*/g, '.*');  // Convert * to .*
+
+    const regex = new RegExp(`^${regexPattern}$`);
+    return regex.test(fileName);
+  }
 }
 
 export async function loadSqlTemplate(templatePath, variables = {}) {
