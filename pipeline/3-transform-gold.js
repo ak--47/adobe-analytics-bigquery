@@ -119,9 +119,9 @@ async function performGoldDataQuality(config, bq, stats) {
   // Check for event distribution issues
   const eventDistSql = `
     SELECT
-      COUNT(CASE WHEN event = 'Page Viewed' THEN 1 END) as page_views,
-      COUNT(CASE WHEN event != 'Page Viewed' THEN 1 END) as business_events,
-      COUNT(DISTINCT event) as unique_event_types,
+      COUNT(CASE WHEN event_name = 'Page Viewed' THEN 1 END) as page_views,
+      COUNT(CASE WHEN event_name != 'Page Viewed' THEN 1 END) as business_events,
+      COUNT(DISTINCT event_name) as unique_event_types,
       COUNT(DISTINCT distinct_id) as unique_visitors
     FROM \`${config.project}.${config.dataset}.${goldTable}\`
   `;

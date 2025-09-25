@@ -199,7 +199,7 @@ events_exploded AS (
     distinct_id,
     COALESCE(event_map.name, event.event_name) AS event_name,
     event.event_code AS original_event_code,
-    event.event_name AS original_event_name,
+    COALESCE(base_event_lookup.name, event.event_name) AS original_event_name,
     FALSE AS is_page_view,
     NOT is_page_view AS is_link_tracking,
 
@@ -302,6 +302,7 @@ events_exploded AS (
   FROM hit_base,
   UNNEST(business_events) AS event WITH OFFSET AS event_index
   LEFT JOIN `${project}.${dataset}.event_map` event_map ON SAFE_CAST(event.event_code AS INT64) = event_map.code
+  LEFT JOIN `${project}.${dataset}.lookup_events` base_event_lookup ON SAFE_CAST(event.event_code AS INT64) = base_event_lookup.id
   LEFT JOIN `${project}.${dataset}.lookup_browser` browser_lookup ON SAFE_CAST(browser AS INT64) = browser_lookup.id
   LEFT JOIN `${project}.${dataset}.lookup_operating_systems` os_lookup ON SAFE_CAST(os AS INT64) = os_lookup.id
   LEFT JOIN `${project}.${dataset}.lookup_connection_type` connection_lookup ON SAFE_CAST(connection_type AS INT64) = connection_lookup.id
