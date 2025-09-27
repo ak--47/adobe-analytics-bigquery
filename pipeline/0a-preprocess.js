@@ -9,6 +9,23 @@ import { readFile } from 'fs/promises';
 import { createGunzip, createGzip } from 'zlib';
 
 // ------------------------------
+// Helper functions
+// ------------------------------
+function formatDuration(ms) {
+  const hours = Math.floor(ms / 3600000);
+  const minutes = Math.floor((ms % 3600000) / 60000);
+  const seconds = Math.floor((ms % 60000) / 1000);
+
+  if (hours > 0) {
+    return `${hours}h ${minutes}m ${seconds}s`;
+  } else if (minutes > 0) {
+    return `${minutes}m ${seconds}s`;
+  } else {
+    return `${seconds}s`;
+  }
+}
+
+// ------------------------------
 // Config
 // ------------------------------
 const DEFAULT_CONFIG = {
@@ -410,6 +427,7 @@ async function reconstruct(
 // ------------------------------
 export async function preprocessFile(inputPath, outputPath, options = {}) {
   const config = { ...DEFAULT_CONFIG, ...options };
+  const startTime = Date.now();
 
   Logger.info(`Preprocessing ${inputPath} -> ${outputPath}`);
 
@@ -444,10 +462,13 @@ export async function preprocessFile(inputPath, outputPath, options = {}) {
     config.paddingTolerance
   );
 
+  const endTime = Date.now();
+  const durationMs = endTime - startTime;
+
   Logger.success(
-    `Preprocessed ${inputPath}: ${result.ok}/${result.records} records processed${result.bad ? `, ${result.bad} rejected` : ''}${result.realigned ? `, ${result.realigned} realigned` : ''}`
+    `Preprocessed ${inputPath}: ${result.ok}/${result.records} records processed${result.bad ? `, ${result.bad} rejected` : ''}${result.realigned ? `, ${result.realigned} realigned` : ''} (${formatDuration(durationMs)})`
   );
-  return result;
+  return { ...result, durationMs };
 }
 
 // ------------------------------
@@ -472,6 +493,8 @@ async function findFiles(pattern) {
 
 export async function preprocessFolder(inputPattern, outputDir, options = {}) {
   const config = { ...DEFAULT_CONFIG, ...options };
+  const startTime = Date.now();
+
   const files = await findFiles(inputPattern);
   if (!files.length) throw new Error(`No files found for pattern: ${inputPattern}`);
 
@@ -486,12 +509,19 @@ export async function preprocessFolder(inputPattern, outputDir, options = {}) {
 
   const results = await Promise.all(tasks);
 
+  const endTime = Date.now();
+  const totalDurationMs = endTime - startTime;
+  const avgFileTime = (totalDurationMs / files.length / 1000).toFixed(1);
+
   const totals = results.reduce((acc, { result }) => {
     acc.records += result.records; acc.ok += result.ok; acc.bad += result.bad; acc.realigned += (result.realigned || 0);
     return acc;
   }, { records: 0, ok: 0, bad: 0, realigned: 0 });
 
-  Logger.success(`Preprocessed ${files.length} files: ${totals.ok}/${totals.records} records processed, ${totals.bad} rejected${totals.realigned ? `, ${totals.realigned} realigned` : ''}`);
+  const recordsPerSec = (totals.records / (totalDurationMs / 1000)).toFixed(0);
+
+  Logger.success(`Preprocessed ${files.length} files in ${formatDuration(totalDurationMs)}: ${totals.ok}/${totals.records} records processed, ${totals.bad} rejected${totals.realigned ? `, ${totals.realigned} realigned` : ''}`);
+  Logger.info(`Performance: ${recordsPerSec} records/sec, ${avgFileTime}s avg per file`);
   return results;
 }
 
@@ -529,6 +559,7 @@ async function expandGcsWildcard(pattern) {
 
 export async function preprocess(config) {
   Logger.info('=== Preprocessing Phase ===');
+  const startTime = Date.now();
 
   if (!config?.gcs?.transformDest) {
     throw new Error('transformDest must be configured in config.gcs.transformDest');
@@ -549,13 +580,15 @@ export async function preprocess(config) {
     return;
   }
 
+  const parallelism = config.pipeline_config?.parallelism ?? config.parallelism ?? DEFAULT_CONFIG.parallelism;
+
   Logger.info(`Preprocessing from: ${inputPattern}`);
   Logger.info(`Preprocessing to:   ${outputDir}`);
-
-  const parallelism = config.pipeline_config?.parallelism ?? config.parallelism ?? DEFAULT_CONFIG.parallelism;
+  Logger.info(`Processing ${inputFiles.length} files with parallelism: ${parallelism}`);
   const limit = pLimit(parallelism);
 
-  const tasks = inputFiles.map(inputFile => {
+  let completedFiles = 0;
+  const tasks = inputFiles.map((inputFile, index) => {
     const fileName = basename(inputFile);
     const outputFile = outputDir.endsWith('/')
       ? `${outputDir}${fileName}`
@@ -572,18 +605,32 @@ export async function preprocess(config) {
         ...config,
         rejectsPath,
         printStats: false
-      }).then(result => ({ inputFile, outputFile, result }))
+      }).then(result => {
+        completedFiles++;
+        if (inputFiles.length > 5 && completedFiles % Math.ceil(inputFiles.length / 10) === 0) {
+          const progress = Math.round((completedFiles / inputFiles.length) * 100);
+          Logger.info(`Progress: ${completedFiles}/${inputFiles.length} files completed (${progress}%)`);
+        }
+        return { inputFile, outputFile, result };
+      })
     );
   });
 
   const results = await Promise.all(tasks);
+
+  const endTime = Date.now();
+  const totalDurationMs = endTime - startTime;
 
   const totals = results.reduce((acc, { result }) => {
     acc.records += result.records; acc.ok += result.ok; acc.bad += result.bad; acc.realigned += (result.realigned || 0);
     return acc;
   }, { records: 0, ok: 0, bad: 0, realigned: 0 });
 
-  Logger.success(`Preprocessed ${results.length} files: ${totals.ok}/${totals.records} records processed${totals.bad ? `, ${totals.bad} rejected` : ''}${totals.realigned ? `, ${totals.realigned} realigned` : ''}`);
+  const recordsPerSec = (totals.records / (totalDurationMs / 1000)).toFixed(0);
+  const avgFileTime = (totalDurationMs / results.length / 1000).toFixed(1);
+
+  Logger.success(`Preprocessed ${results.length} files in ${formatDuration(totalDurationMs)}: ${totals.ok}/${totals.records} records processed${totals.bad ? `, ${totals.bad} rejected` : ''}${totals.realigned ? `, ${totals.realigned} realigned` : ''}`);
+  Logger.info(`Performance: ${recordsPerSec} records/sec, ${avgFileTime}s avg per file`);
 }
 
 // ------------------------------
