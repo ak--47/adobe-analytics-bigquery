@@ -214,6 +214,8 @@ export async function discoverCanonicalTabs(uri) {
 // Assumptions retained:
 //  - TRIPLE_ANCHOR_RE_G matches hit_time_gmt (10 digits), hitid_high (10-20 digits), hitid_low (10-20 digits) (cols 318–320).
 //  - canonicalTabs = tabs-per-record (T) from discovery (mode of Δ between anchors).
+//  - Fallback realignment: If standard validation fails, search ±5 columns around expected anchor position
+//    to detect and correct field shifts caused by embedded tab characters in data.
 //
 // ------------------------------
 // Reconstruction (streaming) - ANCHOR-SAFE & MEMORY-BOUNDED
@@ -241,7 +243,7 @@ async function reconstruct(
   let pendingNL = false;
 
   // Basic metrics
-  let records = 0, ok = 0, bad = 0;
+  let records = 0, ok = 0, bad = 0, realigned = 0;
 
   const writeOut = (s) => outStream.write(s);
   const writeRej = (s) => rejStream && rejStream.write(s);
@@ -278,6 +280,57 @@ async function reconstruct(
     return false;
   }
 
+  // Try to realign a record by finding the triple anchor and adjusting column positions
+  function tryRealignRecord(record) {
+    const parts = record.split('\t');
+
+    // Search for triple anchor pattern in a small range around expected position
+    const expectedAnchorStart = ANCHOR_TABS_BEFORE; // 317 (0-based: 316)
+    const searchRange = 5; // Search ±5 positions from expected
+
+    for (let offset = -searchRange; offset <= searchRange; offset++) {
+      const anchorStart = expectedAnchorStart + offset;
+
+      // Check if we have enough columns and the pattern matches
+      if (anchorStart >= 0 && anchorStart + 2 < parts.length) {
+        const field1 = parts[anchorStart];     // hit_time_gmt
+        const field2 = parts[anchorStart + 1]; // hitid_high
+        const field3 = parts[anchorStart + 2]; // hitid_low
+
+        // Check if this looks like our triple anchor pattern
+        if (field1 && field2 && field3 &&
+            /^[0-9]{10}$/.test(field1) &&
+            /^[0-9]{10,20}$/.test(field2) &&
+            /^[0-9]{10,20}$/.test(field3)) {
+
+          // Found the anchor! Now realign the record
+          if (offset === 0) {
+            // Already aligned, just truncate/pad to correct length
+            return parts.slice(0, canonicalTabs + 1).join('\t');
+          } else if (offset > 0) {
+            // Anchor is shifted right, remove extra fields from the beginning
+            const realignedParts = parts.slice(offset);
+            // Truncate or pad to correct length
+            if (realignedParts.length > canonicalTabs + 1) {
+              return realignedParts.slice(0, canonicalTabs + 1).join('\t');
+            } else if (realignedParts.length < canonicalTabs + 1) {
+              return realignedParts.concat(new Array(canonicalTabs + 1 - realignedParts.length).fill('')).join('\t');
+            }
+            return realignedParts.join('\t');
+          } else {
+            // Anchor is shifted left, add padding to the beginning
+            const padding = new Array(-offset).fill('');
+            const realignedParts = padding.concat(parts);
+            // Truncate to correct length
+            return realignedParts.slice(0, canonicalTabs + 1).join('\t');
+          }
+        }
+      }
+    }
+
+    return null; // Could not realign
+  }
+
   function finalizeCur() {
     if (!cur) return;
     records++;
@@ -297,7 +350,13 @@ async function reconstruct(
     } else if (looksLikeFragment(curTabs)) {
       writeRej(cur + "\n"); bad++;
     } else {
-      writeRej(cur + "\n"); bad++;
+      // Before rejecting, try to realign using triple anchor fallback
+      const realignedRecord = tryRealignRecord(cur);
+      if (realignedRecord) {
+        writeOut(realignedRecord + "\n"); ok++; realigned++;
+      } else {
+        writeRej(cur + "\n"); bad++;
+      }
     }
 
     cur = "";
@@ -336,13 +395,13 @@ async function reconstruct(
   if (cur) finalizeCur();
 
   if (printStats) {
-    Logger.info(`Processed ${uriIn}: ${records} records, ${ok} ok, ${bad} rejected, canonical tabs: ${canonicalTabs}`);
+    Logger.info(`Processed ${uriIn}: ${records} records, ${ok} ok, ${bad} rejected, ${realigned} realigned, canonical tabs: ${canonicalTabs}`);
   }
 
   await new Promise((r) => outStream.end(r));
   if (rejStream) await new Promise((r) => rejStream.end(r));
 
-  return { records, ok, bad, canonicalTabs };
+  return { records, ok, bad, realigned, canonicalTabs };
 }
 
 
@@ -386,7 +445,7 @@ export async function preprocessFile(inputPath, outputPath, options = {}) {
   );
 
   Logger.success(
-    `Preprocessed ${inputPath}: ${result.ok}/${result.records} records processed${result.bad ? `, ${result.bad} rejected` : ''}`
+    `Preprocessed ${inputPath}: ${result.ok}/${result.records} records processed${result.bad ? `, ${result.bad} rejected` : ''}${result.realigned ? `, ${result.realigned} realigned` : ''}`
   );
   return result;
 }
@@ -428,11 +487,11 @@ export async function preprocessFolder(inputPattern, outputDir, options = {}) {
   const results = await Promise.all(tasks);
 
   const totals = results.reduce((acc, { result }) => {
-    acc.records += result.records; acc.ok += result.ok; acc.bad += result.bad;
+    acc.records += result.records; acc.ok += result.ok; acc.bad += result.bad; acc.realigned += (result.realigned || 0);
     return acc;
-  }, { records: 0, ok: 0, bad: 0 });
+  }, { records: 0, ok: 0, bad: 0, realigned: 0 });
 
-  Logger.success(`Preprocessed ${files.length} files: ${totals.ok}/${totals.records} records processed, ${totals.bad} rejected`);
+  Logger.success(`Preprocessed ${files.length} files: ${totals.ok}/${totals.records} records processed, ${totals.bad} rejected${totals.realigned ? `, ${totals.realigned} realigned` : ''}`);
   return results;
 }
 
@@ -520,11 +579,11 @@ export async function preprocess(config) {
   const results = await Promise.all(tasks);
 
   const totals = results.reduce((acc, { result }) => {
-    acc.records += result.records; acc.ok += result.ok; acc.bad += result.bad;
+    acc.records += result.records; acc.ok += result.ok; acc.bad += result.bad; acc.realigned += (result.realigned || 0);
     return acc;
-  }, { records: 0, ok: 0, bad: 0 });
+  }, { records: 0, ok: 0, bad: 0, realigned: 0 });
 
-  Logger.success(`Preprocessed ${results.length} files: ${totals.ok}/${totals.records} records processed${totals.bad ? `, ${totals.bad} rejected` : ''}`);
+  Logger.success(`Preprocessed ${results.length} files: ${totals.ok}/${totals.records} records processed${totals.bad ? `, ${totals.bad} rejected` : ''}${totals.realigned ? `, ${totals.realigned} realigned` : ''}`);
 }
 
 // ------------------------------
