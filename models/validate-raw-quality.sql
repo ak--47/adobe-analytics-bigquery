@@ -9,17 +9,17 @@ WITH quality_check AS (
     -- Count malformed hit_time_gmt (NULL or not exactly 10 digits)
     COUNTIF(hit_time_gmt IS NULL OR NOT REGEXP_CONTAINS(hit_time_gmt, r'^[0-9]{10}$')) AS malformed_hit_time_gmt,
 
-    -- Count malformed hitid_high (NULL or not exactly 19 digits)
-    COUNTIF(hitid_high IS NULL OR NOT REGEXP_CONTAINS(hitid_high, r'^[0-9]{19}$')) AS malformed_hitid_high,
+    -- Count malformed hitid_high (NULL or not 10-20 digits)
+    COUNTIF(hitid_high IS NULL OR NOT REGEXP_CONTAINS(hitid_high, r'^[0-9]{10,20}$')) AS malformed_hitid_high,
 
-    -- Count malformed hitid_low (NULL or not exactly 19 digits)
-    COUNTIF(hitid_low IS NULL OR NOT REGEXP_CONTAINS(hitid_low, r'^[0-9]{19}$')) AS malformed_hitid_low,
+    -- Count malformed hitid_low (NULL or not 10-20 digits)
+    COUNTIF(hitid_low IS NULL OR NOT REGEXP_CONTAINS(hitid_low, r'^[0-9]{10,20}$')) AS malformed_hitid_low,
 
     -- Count records with ANY malformed field (will be dropped in Bronze)
     COUNTIF(
       (hit_time_gmt IS NULL OR NOT REGEXP_CONTAINS(hit_time_gmt, r'^[0-9]{10}$'))
-      OR (hitid_high IS NULL OR NOT REGEXP_CONTAINS(hitid_high, r'^[0-9]{19}$'))
-      OR (hitid_low IS NULL OR NOT REGEXP_CONTAINS(hitid_low, r'^[0-9]{19}$'))
+      OR (hitid_high IS NULL OR NOT REGEXP_CONTAINS(hitid_high, r'^[0-9]{10,20}$'))
+      OR (hitid_low IS NULL OR NOT REGEXP_CONTAINS(hitid_low, r'^[0-9]{10,20}$'))
     ) AS malformed_record_count
 
   FROM `${project}`.`${dataset}`.`${rawTable}`

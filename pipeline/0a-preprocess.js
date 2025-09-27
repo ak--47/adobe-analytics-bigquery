@@ -20,7 +20,8 @@ const DEFAULT_CONFIG = {
 
 // Adobe Analytics triple-anchor pattern (columns 318-320)
 // Allow start-of-line OR tab before hit_time_gmt, to survive physical line splits.
-const TRIPLE_ANCHOR_RE = /(?:^|\t)([0-9]{10})\t([0-9]{15,20})\t([0-9]{15,20})(?=\t|$)/;
+// hit_time_gmt: 10 digits, hitid_high: 10-20 digits, hitid_low: 10-20 digits (flexible for any Adobe data)
+const TRIPLE_ANCHOR_RE = /(?:^|\t)([0-9]{10})\t([0-9]{10,20})\t([0-9]{10,20})(?=\t|$)/;
 const TRIPLE_ANCHOR_RE_G = new RegExp(TRIPLE_ANCHOR_RE, 'g');
 
 // Expected anchor offset from start-of-record in tabs:
@@ -211,7 +212,7 @@ export async function discoverCanonicalTabs(uri) {
 //    by K tabs.
 //
 // Assumptions retained:
-//  - TRIPLE_ANCHOR_RE_G matches hit_time_gmt, hitid_high, hitid_low (cols 318–320).
+//  - TRIPLE_ANCHOR_RE_G matches hit_time_gmt (10 digits), hitid_high (10-20 digits), hitid_low (10-20 digits) (cols 318–320).
 //  - canonicalTabs = tabs-per-record (T) from discovery (mode of Δ between anchors).
 //
 // ------------------------------
